@@ -40,7 +40,7 @@ class Runner(object):
         if not custom_data:
             ent_set, rel_set = OrderedSet(), OrderedSet()
             for split in ['train', 'test', 'valid']:
-                for line in open('data/{}/{}.txt'.format(self.p.dataset, split)):
+                for line in open('../data/{}/{}.txt'.format(self.p.dataset, split)):
                     sub, rel, obj = map(str.lower, line.strip().split('\t'))
                     ent_set.add(sub)
                     rel_set.add(rel)
@@ -53,7 +53,7 @@ class Runner(object):
             # CustomData: RezoJDM16k
 
             self.ent2id = {}
-            with open('data/{}/{}.txt'.format(self.p.dataset, 'entities')) as f:
+            with open('../data/{}/{}.txt'.format(self.p.dataset, 'entities')) as f:
                 for line in f.readlines():
                     tokens = line.strip().split()
                     _id = int(tokens.pop(0))
@@ -61,7 +61,7 @@ class Runner(object):
                     self.ent2id[_ent] = _id
 
             self.rel2id = {}
-            with open('data/{}/{}.txt'.format(self.p.dataset, 'relations')) as f:
+            with open('../data/{}/{}.txt'.format(self.p.dataset, 'relations')) as f:
                 for line in f.readlines():
                     tokens = line.strip().split()
                     _id = int(tokens.pop(0))
@@ -81,7 +81,7 @@ class Runner(object):
         sr2o = ddict(set)
 
         for split in ['train', 'test', 'valid']:
-            for line in open('data/{}/{}.txt'.format(self.p.dataset, split)):
+            for line in open('../data/{}/{}.txt'.format(self.p.dataset, split)):
                 if custom_data:
                     sub, rel, obj = map(int, line.strip().split('\t'))
                 else:
@@ -564,7 +564,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Parser For Arguments', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('-name',        default='testrun',                  help='Set run name for saving/restoring models')
-    parser.add_argument('-data',        dest='dataset',         default='RLF',            help='Dataset to use, default: RLF')
+    parser.add_argument('-data',        dest='dataset',         default='rlf',            help='Dataset to use, default: rlf')
     parser.add_argument('-model',       dest='model',       default='compgcn',      help='Model Name')
     parser.add_argument('-score_func',  dest='score_func',  default='conve',        help='Score Function for Link prediction')
     parser.add_argument('-opn',             dest='opn',             default='corr',                 help='Composition Operation to be used in CompGCN')
