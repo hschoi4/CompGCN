@@ -5,7 +5,7 @@ import wandb
 from carbontracker.tracker import CarbonTracker
 import numpy as np
 from collections import Counter
-
+import argparse
 
 # sys.path.append('./')
 from model.models import *
@@ -40,7 +40,7 @@ class Runner(object):
         if not custom_data:
             ent_set, rel_set = OrderedSet(), OrderedSet()
             for split in ['train', 'test', 'valid']:
-                for line in open('./data/{}/{}.txt'.format(self.p.dataset, split)):
+                for line in open('data/{}/{}.txt'.format(self.p.dataset, split)):
                     sub, rel, obj = map(str.lower, line.strip().split('\t'))
                     ent_set.add(sub)
                     rel_set.add(rel)
@@ -48,25 +48,26 @@ class Runner(object):
 
             self.ent2id = {ent: idx for idx, ent in enumerate(ent_set)}
             self.rel2id = {rel: idx for idx, rel in enumerate(rel_set)}
+
         else:
             # CustomData: RezoJDM16k
 
             self.ent2id = {}
-            with open('./data/{}/{}.txt'.format(self.p.dataset, 'entities')) as f:
+            with open('data/{}/{}.txt'.format(self.p.dataset, 'entities')) as f:
                 for line in f.readlines():
                     tokens = line.strip().split()
                     _id = int(tokens.pop(0))
                     _ent = ' '.join(tokens)
                     self.ent2id[_ent] = _id
+
             self.rel2id = {}
-            with open('./data/{}/{}.txt'.format(self.p.dataset, 'relations')) as f:
+            with open('data/{}/{}.txt'.format(self.p.dataset, 'relations')) as f:
                 for line in f.readlines():
                     tokens = line.strip().split()
                     _id = int(tokens.pop(0))
                     _rel = ' '.join(tokens)
                     self.rel2id[_rel] = _id
 
-        # TODO: 50 years in the future come back and take into account existing reverse relations ,
         self.rel2id.update({rel + '_reverse': idx + len(self.rel2id) for rel, idx, in self.rel2id.items()})
 
         self.id2ent = {idx: ent for ent, idx in self.ent2id.items()}
@@ -80,7 +81,7 @@ class Runner(object):
         sr2o = ddict(set)
 
         for split in ['train', 'test', 'valid']:
-            for line in open('./data/{}/{}.txt'.format(self.p.dataset, split)):
+            for line in open('data/{}/{}.txt'.format(self.p.dataset, split)):
                 if custom_data:
                     sub, rel, obj = map(int, line.strip().split('\t'))
                 else:
@@ -122,7 +123,7 @@ class Runner(object):
                     continue
                 vl_transductive.append((s,r,o))
 
-            # Its possibel that vl_transductive has less triples than we need (based on trim ratio)
+            # Its possible that vl_transductive has less triples than we need (based on trim ratio)
             # if so, throw error asking for some change maube bigger ratio
             if len(vl_transductive) < int(len(vl)*trim_ratio):
                 raise ValueError('During trimming; not enough valid triples left. Retry with bigger trim ratio.')
@@ -131,7 +132,6 @@ class Runner(object):
             vln_transductive = np.array(vl_transductive)
             vln_trimmed = vln_transductive[np.random.choice(vln_transductive.shape[0], size=int(len(vl)*trim_ratio), replace=False), :]
 
-            # project hail mary: we dont know whats happening we only know that this just might fucking work
             sr2o = ddict(set)
             for sub, rel, obj in trn_trimmed:
                 sr2o[(sub, rel)].add(obj)
@@ -252,7 +252,7 @@ class Runner(object):
 
     def load_entity_vectors(self):
         ''' Go to the dataset folder based on p.dataset and get the vectors torch file.'''
-        vectorspath = './data/{}/{}'.format(self.p.dataset, 'vectors_entity_fasttext.torch')
+        vectorspath = 'data/{}/{}'.format(self.p.dataset, 'vectors_entity_fasttext.torch')
         try:
             vectors = torch.load(vectorspath)
         except FileNotFoundError:
@@ -362,7 +362,7 @@ class Runner(object):
             -------
         """
 
-        state             = torch.load(load_path)
+        state             = torch.load(load_path, map_location=self.device)
         state_dict        = state['state_dict']
         self.best_val     = state['best_val']
         self.best_val_mrr = self.best_val['mrr']
@@ -390,7 +390,7 @@ class Runner(object):
 
         left_results  = self.predict(split=split, mode='tail_batch')
         right_results = self.predict(split=split, mode='head_batch')
-        results       = get_combined_results(left_results, right_results)
+        results       = get_combined_results(left_results[0], right_results[0])
         self.logger.info('[Epoch {} {}]: MRR: Tail : {:.5}, Head : {:.5}, Avg : {:.5}'.format(epoch, split, results['left_mrr'], results['right_mrr'], results['mrr']))
 
         if self.p.use_wandb:
@@ -413,7 +413,7 @@ class Runner(object):
             }, step=epoch)
         return results
 
-    def predict(self, split='valid', mode='tail_batch'):
+    def predict(self, split='valid', mode='tail_batch', report_all:bool = True):
         """
             Function to run model evaluation for a given mode
 
@@ -421,16 +421,20 @@ class Runner(object):
             ----------
             split: (string) 	If split == 'valid' then evaluate on the validation set, else the test set
             mode: (string):		Can be 'head_batch' or 'tail_batch'
+            report_all: (bool): If true, we return individual metric scores as well
 
             Returns
             -------
             resutls:			The evaluation results containing the following:
                 results['mr']:         	Average of ranks_left and ranks_right
                 results['mrr']:         Mean Reciprocal Rank
-                results['hits@k']:      Probability of getting the correct preodiction in top-k ranks based on predicted score
+                results['hits@k']:      Probability of getting the correct prediction in top-k ranks based on predicted score
 
         """
         self.model.eval()
+
+        if report_all:
+            all_ranks = torch.Tensor()
 
         with torch.no_grad():
             results = {}
@@ -446,6 +450,10 @@ class Runner(object):
                 ranks           = 1 + torch.argsort(torch.argsort(pred, dim=1, descending=True), dim=1, descending=False)[b_range, obj]
 
                 ranks           = ranks.float()
+
+                if report_all:
+                    all_ranks = torch.cat([all_ranks, ranks.clone().detach().cpu()], dim=0)
+
                 results['count']    = torch.numel(ranks)        + results.get('count', 0.0)
                 results['mr']       = torch.sum(ranks).item()   + results.get('mr',    0.0)
                 results['mrr']      = torch.sum(1.0/ranks).item()   + results.get('mrr',   0.0)
@@ -455,7 +463,11 @@ class Runner(object):
                 if step % 100 == 0:
                     self.logger.info('[{}, {} Step {}]\t{}'.format(split.title(), mode.title(), step, self.p.name))
 
+        if report_all:
+            return results, all_ranks
+
         return results
+
 
     def run_epoch(self, epoch, val_mrr = 0):
         """
@@ -552,12 +564,11 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Parser For Arguments', formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
     parser.add_argument('-name',        default='testrun',                  help='Set run name for saving/restoring models')
-    parser.add_argument('-data',        dest='dataset',         default='RezoJDM16k',            help='Dataset to use, default: FB15k-237')
+    parser.add_argument('-data',        dest='dataset',         default='RLF',            help='Dataset to use, default: RLF')
     parser.add_argument('-model',       dest='model',       default='compgcn',      help='Model Name')
     parser.add_argument('-score_func',  dest='score_func',  default='conve',        help='Score Function for Link prediction')
     parser.add_argument('-opn',             dest='opn',             default='corr',                 help='Composition Operation to be used in CompGCN')
-    parser.add_argument('-use_wandb', type=str2bool, nargs='?', const=True, default=False
-                        , help='Set True for logging this exp on WandB')
+    parser.add_argument('-use_wandb', type=str2bool, nargs='?', const=True, default=False, help='Set True for logging this exp on WandB')
 
     parser.add_argument('-batch',           dest='batch_size',      default=128,    type=int,       help='Batch size')
     parser.add_argument('-gamma',       type=float,             default=40.0,           help='Margin')
