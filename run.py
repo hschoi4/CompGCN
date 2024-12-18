@@ -1,14 +1,12 @@
-from helper import *
+from CompGCN.helper import *
 from tqdm import tqdm, trange
-from data_loader import *
-import wandb
-from carbontracker.tracker import CarbonTracker
+from CompGCN.data_loader import *
 import numpy as np
 from collections import Counter
 import argparse
 
 # sys.path.append('./')
-from model.models import *
+from CompGCN.model.models import *
 
 
 class Runner(object):
@@ -40,7 +38,7 @@ class Runner(object):
         if not custom_data:
             ent_set, rel_set = OrderedSet(), OrderedSet()
             for split in ['train', 'test', 'valid']:
-                for line in open('../data/{}/{}.txt'.format(self.p.dataset, split)):
+                for line in open(f'CompGCN/data/{self.p.dataset}/{split}.txt'):
                     sub, rel, obj = map(str.lower, line.strip().split('\t'))
                     ent_set.add(sub)
                     rel_set.add(rel)
@@ -53,7 +51,7 @@ class Runner(object):
             # CustomData: RezoJDM16k
 
             self.ent2id = {}
-            with open('../data/{}/{}.txt'.format(self.p.dataset, 'entities')) as f:
+            with open('CompGCN/data/{}/{}.txt'.format(self.p.dataset, 'entities')) as f:
                 for line in f.readlines():
                     tokens = line.strip().split()
                     _id = int(tokens.pop(0))
@@ -61,7 +59,7 @@ class Runner(object):
                     self.ent2id[_ent] = _id
 
             self.rel2id = {}
-            with open('../data/{}/{}.txt'.format(self.p.dataset, 'relations')) as f:
+            with open('CompGCN/data/{}/{}.txt'.format(self.p.dataset, 'relations')) as f:
                 for line in f.readlines():
                     tokens = line.strip().split()
                     _id = int(tokens.pop(0))
@@ -81,7 +79,7 @@ class Runner(object):
         sr2o = ddict(set)
 
         for split in ['train', 'test', 'valid']:
-            for line in open('../data/{}/{}.txt'.format(self.p.dataset, split)):
+            for line in open(f'CompGCN/data/{self.p.dataset}/{split}.txt'):
                 if custom_data:
                     sub, rel, obj = map(int, line.strip().split('\t'))
                 else:

@@ -1,4 +1,4 @@
-from helper import *
+from CompGCN.helper import *
 from torch.utils.data import Dataset
 
 class TrainDataset(Dataset):
